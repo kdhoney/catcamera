@@ -18,6 +18,8 @@ import requests
 import RPi.GPIO as GPIO
 import json
 
+cv = threading.Condition()
+
 class ServerSocketThread(threading.Thread):
     def run(self):
         HOST = ''
@@ -56,12 +58,12 @@ class ServerSocketThread(threading.Thread):
                             #socket_in_list.send("STSU")
                             pass
                         elif data == "PS":
-                            stream = ImageProcessor.getInstance().getStream()
+                            stream = ImageProcessor.getInstance().getStream_q()
                             filename = "imgTest.jpg"
                             ff = open(filename, 'w')
                             ff.write(stream)
                             ff.close()
-                            url = 'http://52.27.20.131:8000/image_uploader/up/'
+                            url = 'http://52.27.20.131:8001/image_uploader/up/'
                             files = {'file':open(filename)}
                             r = requests.post(url, files=files)
                             print r
@@ -173,11 +175,14 @@ class ImageProcessor(threading.Thread):
         self.prior_image = None
         self.stream = None
         self.buffer = RingBuffer(100)
+        self.buffer_q = RingBuffer(100)
+        self.upload_req = False
         self.start()
 
     # Run the video streaming thread within the singleton instace.
     def run(self):
         try:
+            global cv
             if(self.camera == None):
                 self.camera = picamera.PiCamera()
                 self.camera.resolution = (176, 144)
@@ -186,20 +191,39 @@ class ImageProcessor(threading.Thread):
             time.sleep(2)
             print "Camera interface started..."
             stream = io.BytesIO()
-            for foo in self.camera.capture_continuous(stream, format='jpeg', use_video_port=True):
-                self.semaphore.acquire()
-                stream.seek(0)
-                self.buffer.append(stream.getvalue())
-                stream.truncate()
-                stream.seek(0)
-                self.semaphore.release()
-                if int(round(time.time() * 1000)) - self.timestamp > 60000:
-                    # Take the camera to sleep if it has not been used for
-                    # 60 seconds.
-                    print "No Client connected for 60 sec, camera set to sleep."
+            while True:
+                for foo in self.camera.capture_continuous(stream, format='jpeg', use_video_port=True):
                     self.semaphore.acquire()
-                    self.isRecording = False
+                    stream.seek(0)
+                    self.buffer.append(stream.getvalue())
+                    stream.truncate()
+                    stream.seek(0)
                     self.semaphore.release()
+                    if self.upload_req == True:
+                        break
+                    if int(round(time.time() * 1000)) - self.timestamp > 60000:
+                        # Take the camera to sleep if it has not been used for
+                        # 60 seconds.
+                        print "No Client connected for 60 sec, camera set to sleep."
+                        self.semaphore.acquire()
+                        self.isRecording = False
+                        self.semaphore.release()
+                    if not self.isRecording:
+                        break
+                
+                if self.upload_req == True:
+                    cv.acquire()
+                    self.upload_req = False
+                    stream = io.BytesIO()
+                    self.camera.resolution = (1056, 864)
+                    self.camera.capture(stream, format='jpeg', use_video_port=True)
+                    stream.seek(0)
+                    self.buffer_q.append(stream.getvalue())
+                    stream.truncate()
+                    stream.seek(0)
+                    self.camera.resolution = (176,144)
+                    cv.notify()
+                    cv.release()                    
                 if not self.isRecording:
                     break
         finally:
@@ -233,7 +257,21 @@ class ImageProcessor(threading.Thread):
             self.semaphore.release()
             self.run()
         return self.buffer.get()
-        
+
+    def getStream_q(self):
+        global cv
+        self.timestamp = int(round(time.time() * 1000))
+        if(self.isRecording == False):
+            self.semaphore.acquire()
+            self.isRecording = True
+            self.semaphore.release()
+            self.run()
+        cv.acquire()
+        self.upload_req = True
+        cv.wait()
+        cv.release()
+        return self.buffer_q.get()
+
 
 """ This class implements the request handler for the HTTP server. This class
     has to be passed to the ThreadedHTTPServer. """            
