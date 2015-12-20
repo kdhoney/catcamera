@@ -124,8 +124,6 @@ class PIRSensorThread(threading.Thread):
             GPIO.cleanup()
 
 
-""" The RingBuffer class provides an implementation of a ring buffer
-    for image data """
 class RingBuffer(threading.Thread):
 
     # Initialize the buffer.
@@ -143,8 +141,6 @@ class RingBuffer(threading.Thread):
     def get(self):
         return self.data[-1]
 
-""" The ImageProcessor class is a singleton implementation that wraps the
-    interface of the Raspicam """
 class ImageProcessor(threading.Thread):
     
     instance = None
@@ -202,7 +198,6 @@ class ImageProcessor(threading.Thread):
                     if self.upload_req == True:
                         break
                     if int(round(time.time() * 1000)) - self.timestamp > 60000:
-                        # Take the camera to sleep if it has not been used for
                         # 60 seconds.
                         print "No Client connected for 60 sec, camera set to sleep."
                         self.semaphore.acquire()
@@ -231,8 +226,6 @@ class ImageProcessor(threading.Thread):
             self.camera.close()
             self.camera = None
 
-    # Detect motion in the video stream.
-    # FIXME: This has to be implemented more sophisticated.
     def detect_motion(self):
         stream = io.BytesIO()
         self.camera.capture(stream, format='jpeg', use_video_port=True)
@@ -271,10 +264,7 @@ class ImageProcessor(threading.Thread):
         cv.wait()
         cv.release()
         return self.buffer_q.get()
-
-
-""" This class implements the request handler for the HTTP server. This class
-    has to be passed to the ThreadedHTTPServer. """            
+          
 class RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
