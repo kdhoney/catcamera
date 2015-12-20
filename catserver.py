@@ -56,9 +56,15 @@ class ServerSocketThread(threading.Thread):
                             #socket_in_list.send("STSU")
                             pass
                         elif data == "PS":
-                            #
-                            #
-                            #
+                            stream = ImageProcessor.getInstance().getStream()
+                            filename = "imgTest.jpg"
+                            ff = open(filename, 'w')
+                            ff.write(stream)
+                            ff.close()
+                            url = 'http://52.27.20.131:8000/image_uploader/up/'
+                            files = {'file':open(filename)}
+                            r = requests.post(url, files=files)
+                            print r
                             print "get data : ", data
                         else: #disconnected from client
                             connection_list.remove(sock)
@@ -174,9 +180,9 @@ class ImageProcessor(threading.Thread):
         try:
             if(self.camera == None):
                 self.camera = picamera.PiCamera()
-                self.camera.resolution = (480, 320)
+                self.camera.resolution = (176, 144)
                 self.camera.framerate = 10
-                self.camera.quality = 5
+                self.camera.quality = 2
             time.sleep(2)
             print "Camera interface started..."
             stream = io.BytesIO()
